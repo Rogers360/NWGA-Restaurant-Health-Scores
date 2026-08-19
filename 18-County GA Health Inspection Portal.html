@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>18-County GA Health Inspection Portal</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text: #f8fafc;
+            --border: #334155;
+            --accent: #38bdf8;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 24px;
+        }
+
+        .header {
+            max-width: 1200px;
+            margin: 0 auto 24px auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 16px;
+        }
+
+        h1 { margin: 0; font-size: 1.5rem; font-weight: 600; }
+        .subtitle { color: #94a3b8; font-size: 0.875rem; margin-top: 4px; }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        input, select {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.875rem;
+        }
+
+        input[type="search"] { flex-grow: 1; min-width: 200px; }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+        }
+
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th { background-color: #0f172a; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 0.875rem;
+        }
+
+        .grade-u { background-color: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+        .grade-c { background-color: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+        .grade-ab { background-color: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid var(--success); }
+
+        .district-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+        .district-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div>
+        <h1>GA 18-County Health Inspection Dashboard</h1>
+        <div class="subtitle">Rolling 30-Day Window | Districts 1-1 (Northwest) & 1-2 (North Georgia)</div>
+    </div>
+    <div id="date-range" style="font-size: 0.875rem; color: #94a3b8;"></div>
+</div>
+
+<div class="container">
+    <div class="controls">
+        <input type="search" id="search-input" placeholder="Search by restaurant name, city, or county..." oninput="filterData()">
+        <select id="grade-filter" onchange="filterData()">
+            <option value="ALL">All Grades</option>
+            <option value="U">Unsatisfactory (&lt;70)</option>
+            <option value="C">Marginal (70-79)</option>
+            <option value="PASS">Satisfactory / Excellent (80-100)</option>
+        </select>
+        <select id="county-filter" onchange="filterData()">
+            <option value="ALL">All 18 Counties</option>
+            <!-- Counties generated via JavaScript -->
+        </select>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Inspection Date</th>
+                <th>County</th>
+                <th>City</th>
+                <th>Facility Name</th>
+                <th>Score</th>
+                <th>Grade</th>
+            </tr>
+        </thead>
+        <tbody id="table-body">
+            <!-- Dynamic Content -->
+        </tbody>
+    </table>
+</div>
+
+<script>
+    const COUNTIES = [
+        "Bartow", "Carroll", "Catoosa", "Chattooga", "Cherokee", "Dade",
+        "Douglas", "Fannin", "Floyd", "Gilmer", "Gordon", "Haralson",
+        "Murray", "Paulding", "Pickens", "Polk", "Walker", "Whitfield"
+    ];
+
+    // Master dataset: Updated dynamically via automated scraper backend or API sync
+    let inspectionData = [];
+
+    function initializeDashboard() {
+        // Set dynamic date text for rolling 30 days
+        const today = new Date();
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+        
+        document.getElementById('date-range').innerText = 
+            `Window: ${thirtyDaysAgo.toLocaleDateString()} – ${today.toLocaleDateString()}`;
+
+        // Populate County Selector
+        const countySelect = document.getElementById('county-filter');
+        COUNTIES.forEach(county => {
+            const opt = document.createElement('option');
+            opt.value = county;
+            opt.innerText = county;
+            countySelect.appendChild(opt);
+        });
+
+        renderTable(inspectionData);
+    }
+
+    function filterData() {
+        const searchTerm = document.getElementById('search-input').value.toLowerCase();
+        const gradeFilter = document.getElementById('grade-filter').value;
+        const countyFilter = document.getElementById('county-filter').value;
+
+        const filtered = inspectionData.filter(item => {
+            const matchesSearch = item.facility.toLowerCase().includes(searchTerm) ||
+                                  item.city.toLowerCase().includes(searchTerm) ||
+                                  item.county.toLowerCase().includes(searchTerm);
+            
+            const matchesCounty = countyFilter === "ALL" || item.county === countyFilter;
+            
+            let matchesGrade = true;
+            if (gradeFilter === "U") matchesGrade = item.score < 70;
+            else if (gradeFilter === "C") matchesGrade = item.score >= 70 && item.score <= 79;
+            else if (gradeFilter === "PASS") matchesGrade = item.score >= 80;
+
+            return matchesSearch && matchesCounty && matchesGrade;
+        });
+
+        renderTable(filtered);
+    }
+
+    function renderTable(data) {
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = '';
+
+        if (data.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:32px;">No inspection records reported within the active 30-day window for the selected filters.</td></tr>`;
+            return;
+        }
+
+        data.forEach(item => {
+            let badgeClass = "grade-ab";
+            if (item.score < 70) badgeClass = "grade-u";
+            else if (item.score < 80) badgeClass = "grade-c";
+
+            const row = `<tr>
+                <td>${item.date}</td>
+                <td><strong>${item.county}</strong></td>
+                <td>${item.city}</td>
+                <td>${item.facility}</td>
+                <td><strong>${item.score}</strong></td>
+                <td><span class="badge ${badgeClass}">${item.grade}</span></td>
+            </tr>`;
+            tbody.innerHTML += row;
+        });
+    }
+
+    window.onload = initializeDashboard;
+</script>
+</body>
+</html>
